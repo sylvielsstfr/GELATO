@@ -13,6 +13,7 @@ def header():
     print("Welcome to GELATO")
     print("Galaxy/AGN Emission Line Analysis TOol")
     print("Developed by R. E. Hviding")
+    print("added debug tools by S. Dagoret-Campagne")
     now = datetime.now()
     print("Started making gelato at",now)
     return now
