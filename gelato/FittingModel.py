@@ -17,8 +17,13 @@ import gelato.CustomModels as CM
 import gelato.ModelComparison as MC
 import gelato.AdditionalComponents as AC
 
+
+
 # Perform initial fit of continuum with F-test
 def FitContinuum(spectrum):
+
+
+    print("call function FitContinuum")
 
     # Continuum region
     region = np.invert(spectrum.emission_region)
@@ -29,7 +34,10 @@ def FitContinuum(spectrum):
 
     # Fit initial continuuum with free redshift
     x0 = ssp.starting()
+    print(">>> FitContinuum::FitModel on SSPContinuumFree ==> x0",x0)
     sspfit = FitModel(ssp,x0,args).x
+    print(">>> FitContinuum::FitModel on SSPContinuumFree ==> sspfit",sspfit)
+
 
     # SSP+PL Continuum
     pl = CM.PowerLawContinuum(spectrum,nssps=ssp.nparams()-1)
@@ -37,38 +45,72 @@ def FitContinuum(spectrum):
 
     # Starting values
     x0 = ssppl.starting()
+    print(">>> FitContinuum::FitModel on SSPContinuumFree + PL  ==> x0",x0)
     x0[:len(sspfit)] = sspfit
+    #print(">>> FitContinuum::FitModel on SSPContinuumFree +PL ==> sspfit",sspfit)
 
     # Fit initial continuuum with free redshift
     sspplfit = FitModel(ssppl,x0,args).x
+    #print("FitContinuum::ssplfit",sspplfit)
+    print(">>> FitContinuum::FitModel on SSPContinuumFree +PL ==> sspplfit",sspplfit)
 
     # Perform F-test
     acceptPL = MC.FTest(ssp,sspfit,ssppl,sspplfit,spectrum,args)
+   
+
+    # SDC: something get bads when having PL ==> TBD
+    acceptPL = False
 
     # Build model with Fixed Redshift
     z = sspplfit[0]
+
+    print(">>> FitContinuum:: - acceptPL=",acceptPL, " z_sspplfit = ",z)
+
     models = [CM.SSPContinuumFixed(z,spectrum,region=region)]
+
     if acceptPL: models.append(pl)
     cont = CM.CompoundModel(models)
 
     # Fit Fixed Model
-    if acceptPL: x0 = sspplfit[1:]
-    else: x0 = sspfit[1:]
+    if acceptPL: 
+        x0 = sspplfit[1:]
+        print(">>> FitContinuum::FitModel on SSPContinuumFixed + PL ==> x0",x0)
+
+    else: 
+        x0 = sspfit[1:]
+        print(">>> FitContinuum::FitModel on SSPContinuumFixed alone ==> x0",x0)
+
     sspfixedfit = FitModel(cont,x0,args)
+
+    if acceptPL:
+        print(">>> FitContinuum::FitModel on SSPContinuumFixed + PL ==> sspfixedfit",sspfixedfit.x)
+    else:
+        print(">>> FitContinuum::FitModel on SSPContinuumFixed  alone ==> sspfixedfit",sspfixedfit.x)
+       
+
+    # SDC:: so now keep the good model
+    x0 = sspfixedfit.x[:]
 
     # Remove SSPs
     model_names = cont.constrain(cont.get_names())
     fitmask = np.invert(sspfixedfit.active_mask.astype(bool))
     sspmask = np.array(['SSP_' in n for n in model_names])
+    print("FitContinuum:: fitmask = ",fitmask)
+    print("FitContinuum:: sspmask = ",sspmask)
+
     if not np.logical_and(fitmask,sspmask).sum(): # If all SSPs are rejected, keep them all
+        print("FitContinuum::If all SSPs are rejected, keep them all")
         models = [CM.SSPContinuumFixed(z,spectrum)]
-        if acceptPL: models.append(pl)
+        if acceptPL: 
+            models.append(pl)
         cont = CM.CompoundModel(models)
         return cont,x0
+    
     ssp_names = [n.replace('SSP_','') for n in model_names[np.logical_and(fitmask,sspmask)]]
     x0 = np.concatenate([sspfixedfit.x[np.logical_and(fitmask,sspmask)],sspfixedfit.x[np.invert(sspmask)]])
 
     # Build Model with Fixed Redshift and Reduced SSPs
+    print("FitContinuum::Build Model with Fixed Redshift and Reduced SSPs")
     models = [CM.SSPContinuumFixed(z,spectrum,ssp_names=ssp_names)]
     if acceptPL: models.append(pl)
     cont = CM.CompoundModel(models)
@@ -78,6 +120,10 @@ def FitContinuum(spectrum):
 
 # Construct Full Model with F-tests for additional parameters
 def FitComponents(spectrum,cont,cont_x,emis,emis_x):
+
+    print("Call function FitComponents")
+
+   
 
     # Fit region
     args = (spectrum.wav,spectrum.flux,spectrum.isig)
@@ -217,7 +263,10 @@ def FitComponents(spectrum,cont,cont_x,emis,emis_x):
     return model,model_fit
 
 # Fit Model
+#def FitModel(model,x0,args,jac='2-point'):
 def FitModel(model,x0,args,jac='3-point'):
+#def FitModel(model,x0,args,jac='cs'): Not working
+
     
     fit = least_squares(fun = model.residual, jac = jac, x0 = x0, args = args, bounds = model.get_bounds(), method = 'trf', x_scale='jac',max_nfev=100,tr_solver='lsmr',tr_options={'regularize':True})
 
@@ -257,6 +306,9 @@ def SplitFlux(model,x0):
 
 # Add additional component to a model
 def AddComplexity(EmissionGroups_old,index):
+
+
+    print("addComplexity")
 
     # If multiple indices, add all of them
     if hasattr(index,'__iter__'):

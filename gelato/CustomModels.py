@@ -135,6 +135,8 @@ class SpectralFeature():
 
         # Set bounds
         self.Redshift_bounds = (C*(spec.z-0.001),C*(spec.z+0.001))
+        # try to increase range of redshift in case resolusion is bad
+        #self.Redshift_bounds = (C*(spec.z-0.005),C*(spec.z+0.005))
         Fbound = 1.5*Flux*self.Dispersion_bounds[1]/self.Dispersion
         self.Flux_bounds = (-Fbound,Fbound)
 
@@ -361,7 +363,9 @@ class SSPContinuumFixed():
     def starting(self):
 
         # Set initial parameters
-        x = self.spec.wav*(1+self.spec.z)
+        # SDC:: Found error here !!!
+        # x = self.spec.wav*(1+self.spec.z)
+        x = self.sssp_wav*(1+self.spec.z)
         region = np.logical_and(x > self.spec.wav.min(),x < self.spec.wav.max())
         meds = np.array([np.median(s[np.logical_and(region,s>0)]) for s in self.ssps])
 
