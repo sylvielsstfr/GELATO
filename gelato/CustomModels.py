@@ -134,9 +134,9 @@ class SpectralFeature():
         Flux = Height * (1 + spec.z) * self.Dispersion * self.center / ( OOSQRT_2_PI * C )
 
         # Set bounds
-        self.Redshift_bounds = (C*(spec.z-0.001),C*(spec.z+0.001))
+        #self.Redshift_bounds = (C*(spec.z-0.001),C*(spec.z+0.001))
         # try to increase range of redshift in case resolusion is bad
-        #self.Redshift_bounds = (C*(spec.z-0.005),C*(spec.z+0.005))
+        self.Redshift_bounds = (C*(spec.z-0.005),C*(spec.z+0.005))
         Fbound = 1.5*Flux*self.Dispersion_bounds[1]/self.Dispersion
         self.Flux_bounds = (-Fbound,Fbound)
 
@@ -248,6 +248,12 @@ class PowerLawContinuum():
 
         Coefficient = avg/self.nssps
         Index = 1.5
+
+        # SDC:: adapt to Fors2 spectra
+        #
+        Coefficient = avg/self.nssps/5
+        Index = 0.0
+
         self.Center = np.nanpercentile(self.spec.wav,20)
 
         # Return starting value
@@ -364,8 +370,11 @@ class SSPContinuumFixed():
 
         # Set initial parameters
         # SDC:: Found error here !!!
+        # use the redshift provided in construction
+        # select redshifted model wavelengths in spectrum range
+        # apply redshift to get observed wavelength
         # x = self.spec.wav*(1+self.spec.z)
-        x = self.sssp_wav*(1+self.spec.z)
+        x = self.ssp_wav*(1+self.redshift)
         region = np.logical_and(x > self.spec.wav.min(),x < self.spec.wav.max())
         meds = np.array([np.median(s[np.logical_and(region,s>0)]) for s in self.ssps])
 
@@ -390,7 +399,7 @@ class SSPContinuumFixed():
 
         # Calculate Hessian Matrices
 
-        return np.zeros((self.nparams,self.nparams,spec.wav.size))
+        return np.zeros((self.nparams,self.nparams,self.spec.wav.size))
 
     def get_bounds(self):
 
