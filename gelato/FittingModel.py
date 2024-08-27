@@ -3,6 +3,7 @@
 # # Ignore warnings
 # import warnings
 # warnings.simplefilter('ignore')
+# SDC:: August 2024 stabilize the continuum before fitting spectral features
 
 # Packages
 import copy
@@ -19,10 +20,12 @@ import gelato.AdditionalComponents as AC
 from gelato.Constants import C
 
 
+debug_level = 1
+
 # Perform initial fit of continuum with F-test
 def FitContinuum(spectrum):
 
-    if spectrum.p["Verbose"]:
+    if spectrum.p["Verbose"] and debug_level> 0:
         print("Call function FitContinuum")
     z_init = spectrum.z
 
@@ -36,11 +39,11 @@ def FitContinuum(spectrum):
     # Fit initial continuuum with free redshift
     x0 = ssp.starting()
 
-    if spectrum.p["Verbose"]:
+    if spectrum.p["Verbose"] and debug_level > 1:
         print(">>> FitContinuum::FitModel on SSPContinuumFree ==> x0 = ",x0)
     sspfit = FitModel(ssp,x0,args).x
 
-    if spectrum.p["Verbose"]:
+    if spectrum.p["Verbose"] and debug_level > 1:
         print(">>> FitContinuum::FitModel on SSPContinuumFree ==> sspfit = ",sspfit)
 
 
@@ -51,7 +54,7 @@ def FitContinuum(spectrum):
     # Starting values
     x0 = ssppl.starting()
 
-    if spectrum.p["Verbose"]:
+    if spectrum.p["Verbose"] and debug_level > 1:
         print(">>> FitContinuum::FitModel on SSPContinuumFree + PL  ==> x0 = ",x0)
 
     x0[:len(sspfit)] = sspfit
@@ -60,18 +63,18 @@ def FitContinuum(spectrum):
     # Fit initial continuuum with free redshift
     sspplfit = FitModel(ssppl,x0,args).x
    
-    if spectrum.p["Verbose"]:
+    if spectrum.p["Verbose"] and debug_level > 1:
         print(">>> FitContinuum::FitModel on SSPContinuumFree + PL ==> sspplfit = ",sspplfit)
 
     # Perform F-test
     acceptPL = MC.FTest(ssp,sspfit,ssppl,sspplfit,spectrum,args)
    
-    if spectrum.p["Verbose"]:
+    if spectrum.p["Verbose"] and debug_level > 0:
         print(">>> FitContinuum:: Perform F-test, acceptPL  = ", acceptPL)
 
 
     # SDC: something get bads when having PL ==> TBD
-    acceptPL = False
+    # acceptPL = False
 
     # Build model with Fixed Redshift
     if acceptPL:
@@ -82,14 +85,16 @@ def FitContinuum(spectrum):
     dz = z/C-z_init
 
     if acceptPL:
-        if spectrum.p["Verbose"]:
+        if spectrum.p["Verbose"] and debug_level > 0:
             print("===============================================================================")
-    if spectrum.p["Verbose"]:
-        print(">>> !!!!! FitContinuum:: - acceptPL = ",acceptPL, ", z_sspplfit = ",z,", dz = ",dz," !!!!!!")
+            print(">>> !!!!! FitContinuum(PL OK)::- acceptPL = ",acceptPL, ", z_sspplfit = ",z,", dz = ",dz," !!!!!!")
+            print("===============================================================================")
+    else:
+        if spectrum.p["Verbose"] and debug_level > 0:
+            print("===============================================================================")
+            print(">>> !!!!! FitContinuum(NO PL):: - acceptPL = ",acceptPL, ", z_sspfit = ",z,", dz = ",dz," !!!!!!")
+            print("===============================================================================")
 
-    if acceptPL:
-        if spectrum.p["Verbose"]:
-            print("===============================================================================")
 
     # create the contiuum model (no fit in z) with the  previously fitted redshift
 
@@ -98,28 +103,29 @@ def FitContinuum(spectrum):
     if acceptPL: 
         models.append(pl)
 
+    # create the compount model for fixed redshift
     cont = CM.CompoundModel(models)
 
     # Fit Fixed Model
     # Note we remove the redshift first parameter
     if acceptPL: 
         x0 = sspplfit[1:]
-        if spectrum.p["Verbose"]:
+        if spectrum.p["Verbose"] and debug_level > 1:
             print(">>> FitContinuum::FitModel on SSPContinuumFixed + PL ==> x0",x0)
 
     else: 
         x0 = sspfit[1:]
-        if spectrum.p["Verbose"]:
+        if spectrum.p["Verbose"] and debug_level > 1:
             print(">>> FitContinuum::FitModel on SSPContinuumFixed alone ==> x0",x0)
 
     # SDC:: Note this fit nothing as the SSPContinuumFixed is not implemented
     sspfixedfit = FitModel(cont,x0,args)
 
     if acceptPL:
-        if spectrum.p["Verbose"]:
+        if spectrum.p["Verbose"] and debug_level > 1:
             print(">>> FitContinuum::FitModel on SSPContinuumFixed + PL ==> sspfixedfit",sspfixedfit.x)
     else:
-        if spectrum.p["Verbose"]:
+        if spectrum.p["Verbose"] and debug_level > 1:
             print(">>> FitContinuum::FitModel on SSPContinuumFixed  alone ==> sspfixedfit",sspfixedfit.x)
        
 
@@ -127,34 +133,46 @@ def FitContinuum(spectrum):
     fit_msg = sspfixedfit.message
     x0 = sspfixedfit.x[:]
 
-    if spectrum.p["Verbose"]:
-        print(">>> Final FitContinuum::FitModel on SSPContinuumFixed, msg = ", fit_msg ,"x0 = ",x0)
+    if spectrum.p["Verbose"] and debug_level > 0:
+        print(">>> Final FitContinuum::FitModel on SSPContinuumFixed, msg = ", fit_msg ," res = ",x0)
 
     # Remove SSPs
     model_names = cont.constrain(cont.get_names())
+
+    #Each component shows whether a corresponding constraint is active (that is, whether a variable is at the bound):
     fitmask = np.invert(sspfixedfit.active_mask.astype(bool))
+
     sspmask = np.array(['SSP_' in n for n in model_names])
 
-    if spectrum.p["Verbose"]:
-        print("FitContinuum:: fitmask = ",fitmask)
-        print("FitContinuum:: sspmask = ",sspmask)
-        print("FitContinuum:: andmask = ",np.logical_and(fitmask,sspmask))
+    if spectrum.p["Verbose"] and debug_level > 1:
+        print("\t FitContinuum:: fitmask = ",fitmask)
+        print("\t FitContinuum:: sspmask = ",sspmask)
+        print("\t FitContinuum:: andmask = ",np.logical_and(fitmask,sspmask)," sum = ",np.logical_and(fitmask,sspmask).sum())
 
+    # Probably the normal way to end
     if not np.logical_and(fitmask,sspmask).sum(): # If all SSPs are rejected, keep them all
-        if spectrum.p["Verbose"]:
-            print("FitContinuum::If all SSPs are rejected, keep them all")
+        if spectrum.p["Verbose"] and debug_level > 0:
+            print("FitContinuum:: All SSPs are active during the fit, keep them all")
         models = [CM.SSPContinuumFixed(z,spectrum)]
         if acceptPL: 
             models.append(pl)
         cont = CM.CompoundModel(models)
         return cont,x0
     
+    # Determine which SSP is useless in the fit (reach boundary)
+    # Not sure this ordering works !!!
     ssp_names = [n.replace('SSP_','') for n in model_names[np.logical_and(fitmask,sspmask)]]
     x0 = np.concatenate([sspfixedfit.x[np.logical_and(fitmask,sspmask)],sspfixedfit.x[np.invert(sspmask)]])
 
+
+    if spectrum.p["Verbose"] and debug_level > 0:
+        print("\t \t Fitcontinum abnormal END ==> Check!")
+        print("\t \t - ssp_names = \n",ssp_names)
+        print("\t \t - x0 = \n",x0)
+
     # Build Model with Fixed Redshift and Reduced SSPs
-    if spectrum.p["Verbose"]:
-        print("FitContinuum::Build Model with Fixed Redshift and Reduced SSPs")
+    if spectrum.p["Verbose"] and debug_level > 0:
+        print("\t >>>>>>  FitContinuum::AbnormalEND ??? Build Model with Fixed Redshift and Reduced SSPs, ++++ Please Check")
     models = [CM.SSPContinuumFixed(z,spectrum,ssp_names=ssp_names)]
     if acceptPL: models.append(pl)
     cont = CM.CompoundModel(models)
@@ -165,12 +183,17 @@ def FitContinuum(spectrum):
 # Construct Full Model with F-tests for additional parameters
 def FitComponents(spectrum,cont,cont_x,emis,emis_x):
 
-    if spectrum.p["Verbose"]:
+    if spectrum.p["Verbose"] and debug_level > 0:
         print("Call function FitComponents")
 
 
     # Fit region
     args = (spectrum.wav,spectrum.flux,spectrum.isig)
+
+
+    # SDC:: Be sure to fix the continuum not to fit it
+    # SDC:: The line below makes sure the baseline is not moving after FitContinuum
+    cont.models[0].bounds = tuple((cont_x[i]*(1-1e-5),cont_x[i]*(1+1e-5)) for i in range(cont.models[0].nparams))
 
     # Base Model
     constraints = BM.TieParams(spectrum,cont.get_names()+emis.get_names())
@@ -184,8 +207,8 @@ def FitComponents(spectrum,cont,cont_x,emis,emis_x):
     base_fit = fit_result.x
     #base_fit = FitModel(base_model,x0,args,jac=base_model.jacobian).x
 
-    if spectrum.p["Verbose"]:
-        print(">>>> FitComponents :: FitModel ==> message =",base_fit_msg)
+    if spectrum.p["Verbose"] and debug_level > 1:
+        print(">>>> FitComponents :: FitModel ==> message =",base_fit_msg," res =",base_fit)
 
     # Find number of flags
     flags = 0
@@ -193,7 +216,8 @@ def FitComponents(spectrum,cont,cont_x,emis,emis_x):
         for species in group['Species']:
             flagbits = bin(species['Flag'])[2:]
             flags += len(flagbits.replace('0',''))
-            print("g=",group["Name"],"\t s=",species["Name"],"\t flagbits=",flagbits,"\t flags=",flags)
+            if spectrum.p["Verbose"] and debug_level > 1:
+                print("g=",group["Name"],"\t s=",species["Name"],"\t flagbits=",flagbits,"\t flags=",flags)
            
 
     ## Use F-test for additional component selection
@@ -205,7 +229,7 @@ def FitComponents(spectrum,cont,cont_x,emis,emis_x):
         # Add new component
         EmissionGroups = AddComplexity(spectrum.p['EmissionGroups'],i)
 
-        if spectrum.p["Verbose"]:
+        if spectrum.p["Verbose"] and debug_level > 1:
             print(f"AddComplexity :: flag={i} ,\t EmissionGroups = ",EmissionGroups)
         
         emis,emis_x = BM.BuildEmission(spectrum,EmissionGroups)
@@ -223,13 +247,13 @@ def FitComponents(spectrum,cont,cont_x,emis,emis_x):
         fit_msg = fit.message
         fit_res = fit.x
 
-        if spectrum.p["Verbose"]:
+        if spectrum.p["Verbose"] and debug_level > 1:
             print(">>>> fit result ::",fit_msg, " x = ", fit_res)
 
         # Get pnames of new components
         model_pnames = model.get_names()
 
-        if spectrum.p["Verbose"]:
+        if spectrum.p["Verbose"] and debug_level > 1:
             print("-> model ",i,"\t * model_pnames = \n",model_pnames)
 
         diff = np.setdiff1d(model_pnames,base_model.get_names(),assume_unique=True)
@@ -245,20 +269,20 @@ def FitComponents(spectrum,cont,cont_x,emis,emis_x):
 
         # Perform F-test
         if not MC.FTest(base_model,base_fit,model,fit.x,spectrum,args):
-            if spectrum.p["Verbose"]:
+            if spectrum.p["Verbose"] and debug_level > 1:
                 print(f"    -> model {i} rejected")
             continue
 
         # Accept
         accepted.append(i)
-        if spectrum.p["Verbose"]:
+        if spectrum.p["Verbose"] and debug_level > 1:
             print(f"     -> model {i} accepted")
 
     ## Check all combinations of accepted components with AICs
     # All combinations
     combs = sum([list(combinations(accepted,i+1)) for i in range(len(accepted))],[])
 
-    if spectrum.p["Verbose"]:
+    if spectrum.p["Verbose"] and debug_level > 1:
         print("->>>  combinations of accepted components with AICs = \n",combs)
 
 
@@ -284,14 +308,14 @@ def FitComponents(spectrum,cont,cont_x,emis,emis_x):
         fit = FitModel(model,x0,args,jac=model.jacobian)
         fit_msg = fit.message
         fit_res = fit.x
-        if spectrum.p["Verbose"]:
+        if spectrum.p["Verbose"] and debug_level > 1:
             print(f"->>>>> fit result {i}::{c} ==> msg ",fit_msg," x = ",fit_res)
 
         # Get pnames of new components
         model_pnames = model.get_names()
         diff = np.setdiff1d(model_pnames,base_model.get_names(),assume_unique=True)
 
-        if spectrum.p["Verbose"]:
+        if spectrum.p["Verbose"] and debug_level > 1:
             print("---> model ",i,"\t setdiff1d = \n",diff)
 
         # Reject component if we hit limits
@@ -309,7 +333,7 @@ def FitComponents(spectrum,cont,cont_x,emis,emis_x):
     if (combs != []) and (min(combs) != np.inf):
         accepted = combs[np.argmin(AICs)]
 
-    if spectrum.p["Verbose"]:
+    if spectrum.p["Verbose"] and debug_level > 1:
         print(">>> Use min AIC accepted",accepted)
 
     # Construct Model with Complexity
@@ -328,7 +352,7 @@ def FitComponents(spectrum,cont,cont_x,emis,emis_x):
     model_fit_msg = model_fit.message 
     model_fit_res = model_fit.x
 
-    if spectrum.p["Verbose"]:
+    if spectrum.p["Verbose"] and debug_level > 0:
         print(">>>>> model_fit message = ",  model_fit_msg, "x = ",model_fit_res)
 
     # Remove SSPs
@@ -336,7 +360,7 @@ def FitComponents(spectrum,cont,cont_x,emis,emis_x):
     fitmask = np.invert(model_fit.active_mask.astype(bool))
     sspmask = np.array(['SSP_' in n for n in model_names])
 
-    if spectrum.p["Verbose"]:
+    if spectrum.p["Verbose"] and debug_level > 1:
         print("model_names = ",model_names)
         print("fitmask = ",fitmask)
         print("sspmask = ",sspmask)
@@ -345,7 +369,7 @@ def FitComponents(spectrum,cont,cont_x,emis,emis_x):
    
 
     if not np.logical_and(fitmask,sspmask).sum(): # If all SSPs are rejected, keep them all
-        if spectrum.p["Verbose"]:
+        if spectrum.p["Verbose"] and debug_level > 1:
             print("If all SSPs are rejected, keep them all")
         return model,model_fit.x
 
@@ -369,7 +393,7 @@ def FitComponents(spectrum,cont,cont_x,emis,emis_x):
     final_model_fit_res = finalmodel_fit.x
     final_model_fit_msg = finalmodel_fit.message
 
-    if spectrum.p["Verbose"]:
+    if spectrum.p["Verbose"] and debug_level > 0:
         print(">>>> FINAL model_fit message = ",  final_model_fit_msg, " x = ", final_model_fit_res)
 
     return model,final_model_fit
@@ -419,8 +443,8 @@ def SplitFlux(model,x0):
 # Add additional component to a model
 def AddComplexity(EmissionGroups_old,index):
 
-
-    print("AddComplexity:: index = ",index)
+    if debug_level > 1:
+        print("AddComplexity:: index = ",index)
 
     # If multiple indices, add all of them
     if hasattr(index,'__iter__'):

@@ -4,6 +4,8 @@ import numpy as np
 import gelato.CustomModels as CM
 from gelato.Constants import C
 
+debug_level = 1
+
 def ComponentName(index):
 
     '''
@@ -32,6 +34,9 @@ def AddComponent(flag, line, spectrum, prefix):
     # Find index
     flag = bin(flag)[3:]
     index = len(flag) - flag.index('1') - 1
+
+    if spectrum.p["Verbose"] and debug_level> 0:
+        print(f"AddComponent flag = {flag} index = {index} --> ",ComponentName(index))
 
     ''' Broad '''
     if index == 0: 
