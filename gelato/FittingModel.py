@@ -27,6 +27,8 @@ def FitContinuum(spectrum):
 
     if spectrum.p["Verbose"] and debug_level> 0:
         print("Call function FitContinuum")
+        print("==========================")
+
     z_init = spectrum.z
 
     # Continuum region
@@ -184,20 +186,24 @@ def FitContinuum(spectrum):
 def FitComponents(spectrum,cont,cont_x,emis,emis_x):
 
     if spectrum.p["Verbose"] and debug_level > 0:
-        print("Call function FitComponents")
+        print("\n Call function FitComponents")
+        print("===========================")
 
 
     # Fit region
     args = (spectrum.wav,spectrum.flux,spectrum.isig)
 
 
-    # SDC:: Be sure to fix the continuum not to fit it
+    # SDC:: Be sure to fix the continuum not to fit it again (especially for noisy Fors2)
     # SDC:: The line below makes sure the baseline is not moving after FitContinuum
     cont.models[0].bounds = tuple((cont_x[i]*(1-1e-5),cont_x[i]*(1+1e-5)) for i in range(cont.models[0].nparams))
 
-    # Base Model
+    # Base Model with base emission lines
     constraints = BM.TieParams(spectrum,cont.get_names()+emis.get_names())
     base_model,x0 = BM.BuildModel(spectrum,cont,cont_x,emis,emis_x,constraints)
+
+    if spectrum.p["Verbose"] and debug_level > 0:
+        print("\t ==> base model + base emission lines = ",base_model.get_names())
 
     # Initial fit
     x0 = base_model.constrain(x0) # Limit to true parameters
@@ -207,8 +213,13 @@ def FitComponents(spectrum,cont,cont_x,emis,emis_x):
     base_fit = fit_result.x
     #base_fit = FitModel(base_model,x0,args,jac=base_model.jacobian).x
 
-    if spectrum.p["Verbose"] and debug_level > 1:
-        print(">>>> FitComponents :: FitModel ==> message =",base_fit_msg," res =",base_fit)
+    if spectrum.p["Verbose"] and debug_level > 0:
+        print(">>>> FitComponents :: FitModel (Base model + emission) ==> message =",base_fit_msg," res =",base_fit)
+
+    if spectrum.p["Verbose"] and debug_level > 0:
+        print("\n Search for additional components : ")
+        print("--------------------------------")
+
 
     # Find number of flags
     flags = 0
@@ -229,8 +240,8 @@ def FitComponents(spectrum,cont,cont_x,emis,emis_x):
         # Add new component
         EmissionGroups = AddComplexity(spectrum.p['EmissionGroups'],i)
 
-        if spectrum.p["Verbose"] and debug_level > 1:
-            print(f"AddComplexity :: flag={i} ,\t EmissionGroups = ",EmissionGroups)
+        if spectrum.p["Verbose"] and debug_level > 0:
+            print(f"\t - AddComplexity :: flag={i} ,\t EmissionGroups = ",EmissionGroups)
         
         emis,emis_x = BM.BuildEmission(spectrum,EmissionGroups)
 
@@ -242,24 +253,24 @@ def FitComponents(spectrum,cont,cont_x,emis,emis_x):
         x0 = SplitFlux(model,x0)
         x0 = model.constrain(x0) # Limit to true parameters
 
-        # Fit Model
+        # Fit Model the emmision line
         fit = FitModel(model,x0,args,jac=model.jacobian)
         fit_msg = fit.message
         fit_res = fit.x
 
-        if spectrum.p["Verbose"] and debug_level > 1:
-            print(">>>> fit result ::",fit_msg, " x = ", fit_res)
+        if spectrum.p["Verbose"] and debug_level > 0:
+            print("\t >>>> AddComplexity fit result (flag {i}) ::",fit_msg, " x = ", fit_res)
 
         # Get pnames of new components
         model_pnames = model.get_names()
 
         if spectrum.p["Verbose"] and debug_level > 1:
-            print("-> model ",i,"\t * model_pnames = \n",model_pnames)
+            print("\t ==> model ",i,"\t * model_pnames = \n",model_pnames)
 
         diff = np.setdiff1d(model_pnames,base_model.get_names(),assume_unique=True)
 
-        if spectrum.p["Verbose"]:
-            print("-> model ",i,"\t setdiff1d = \n",diff)
+        if spectrum.p["Verbose"] and debug_level > 0:
+            print("\t ==> model with new components  ",i,"\t setdiff1d = \n",diff)
         
         # Reject component if we hit limits
         # mask = fit.active_mask
@@ -269,22 +280,27 @@ def FitComponents(spectrum,cont,cont_x,emis,emis_x):
 
         # Perform F-test
         if not MC.FTest(base_model,base_fit,model,fit.x,spectrum,args):
-            if spectrum.p["Verbose"] and debug_level > 1:
-                print(f"    -> model {i} rejected")
+            if spectrum.p["Verbose"] and debug_level > 0:
+                print(f"\t    -> new model with new component (flag {i}) rejected")
             continue
 
         # Accept
         accepted.append(i)
-        if spectrum.p["Verbose"] and debug_level > 1:
-            print(f"     -> model {i} accepted")
+        if spectrum.p["Verbose"] and debug_level > 0:
+            print(f"\t     -> new model with new component (flag {i}) accepted")
 
     ## Check all combinations of accepted components with AICs
     # All combinations
     combs = sum([list(combinations(accepted,i+1)) for i in range(len(accepted))],[])
 
-    if spectrum.p["Verbose"] and debug_level > 1:
-        print("->>>  combinations of accepted components with AICs = \n",combs)
+    if spectrum.p["Verbose"] and debug_level > 0:
+        print(f"->>>  combinations of accepted components with AICs = {combs}")
+        print(f"->>> accepted = {accepted}")
 
+
+    if spectrum.p["Verbose"] and debug_level > 0:
+        print("Iterate over all combinations and record AICs, comb = ",combs)
+        print("------------------------------------------------------------")
 
     # Initialize AIC list
     AICs = np.zeros(len(combs))
@@ -308,15 +324,15 @@ def FitComponents(spectrum,cont,cont_x,emis,emis_x):
         fit = FitModel(model,x0,args,jac=model.jacobian)
         fit_msg = fit.message
         fit_res = fit.x
-        if spectrum.p["Verbose"] and debug_level > 1:
+        if spectrum.p["Verbose"] and debug_level > 0:
             print(f"->>>>> fit result {i}::{c} ==> msg ",fit_msg," x = ",fit_res)
 
         # Get pnames of new components
         model_pnames = model.get_names()
         diff = np.setdiff1d(model_pnames,base_model.get_names(),assume_unique=True)
 
-        if spectrum.p["Verbose"] and debug_level > 1:
-            print("---> model ",i,"\t setdiff1d = \n",diff)
+        if spectrum.p["Verbose"] and debug_level > 0:
+            print("\t ---> model ",i,f" c = {c}","\t setdiff1d = \n",diff)
 
         # Reject component if we hit limits
         mask = fit.active_mask
@@ -333,7 +349,7 @@ def FitComponents(spectrum,cont,cont_x,emis,emis_x):
     if (combs != []) and (min(combs) != np.inf):
         accepted = combs[np.argmin(AICs)]
 
-    if spectrum.p["Verbose"] and debug_level > 1:
+    if spectrum.p["Verbose"] and debug_level > 0:
         print(">>> Use min AIC accepted",accepted)
 
     # Construct Model with Complexity
@@ -360,7 +376,7 @@ def FitComponents(spectrum,cont,cont_x,emis,emis_x):
     fitmask = np.invert(model_fit.active_mask.astype(bool))
     sspmask = np.array(['SSP_' in n for n in model_names])
 
-    if spectrum.p["Verbose"] and debug_level > 1:
+    if spectrum.p["Verbose"] and debug_level > 0:
         print("model_names = ",model_names)
         print("fitmask = ",fitmask)
         print("sspmask = ",sspmask)

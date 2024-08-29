@@ -69,8 +69,9 @@ def EWfromresults(params,fpath,z):
 
     # Get just the final bit of the path
     fpath = path.split(fpath)[-1]
-
-    if spectrum.regions != []:
+    
+    #if spectrum.regions != []:
+    if len(spectrum.regions) > 0:
 
         # Load name and parameters
         fname = path.join(params['OutFolder'],U.fileName(fpath))+'-results.fits'

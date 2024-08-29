@@ -7,6 +7,8 @@ from astropy.io import fits
 # GELATO
 from gelato.Constants import C
 
+debug_level = 1
+
 C2 = C*C
 OOSQRT_2_PI = 1/np.sqrt(2*np.pi)
 
